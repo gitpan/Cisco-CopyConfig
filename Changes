@@ -1,0 +1,10 @@
+Revision history for Perl extension Cisco::CopyConfig.
+
+1.2	2003/03/20 - Aaron Scarisbrick
+	- Added documentation 
+	- Added Exporter objects
+	- Dialed back timeout and retry settings to something reasonable.
+	- Minor formatting and indentation cleanup.
+
+1.1	2003/02/19 - Aaron Scarisbrick
+	- Initial revision
