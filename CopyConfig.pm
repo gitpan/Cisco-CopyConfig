@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 ###
-### $Id: CopyConfig.pm,v 1.2 2003/03/20 08:16:44 aaronsca Exp $
+### $Id: CopyConfig.pm,v 1.3 2004/11/04 22:23:19 aaronsca Exp $
 ###
 ### -- Manipulate running-config of devices running IOS
 ###
@@ -10,20 +10,9 @@ use strict;
 use Socket;
 use Exporter;
 use Net::SNMP;
-use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
+use vars qw($VERSION);
 
-$VERSION	= '$Revision: 1.2 $ ' =~ /\$Revision:\s+([^\s]+)/;
-@ISA		= qw(Exporter);
-@EXPORT		= ();
-@EXPORT_OK	= (
-  'ccCopyProtocol', 'ccCopySourceFileType', 'ccCopyDestFileType',
-  'ccCopyServerAddress', 'ccCopyFileName', 'ccCopyEntryRowStatus',
-  'ccCopyState', 'ccCopyFailCause'
-);
-%EXPORT_TAGS	= (
-  ALL		=> [@EXPORT_OK],  
-  oids		=> [@EXPORT_OK]  
-);
+$VERSION	= '$Revision: 1.3 $ ' =~ /\$Revision:\s+([^\s]+)/;
 
 sub new {
 ###
@@ -39,7 +28,7 @@ sub new {
   }, $class;
   $self->_newarg(@_);					## - Parse arguments
   srand(time() ^ ($$ + ($$ << 15)));			## - Seed random number
-  $self->{snmp}	= $self->open();			## - Get SNMP object
+  $self->{'snmp'} = $self->open();			## - Get SNMP object
   $self;
 }
 
@@ -50,15 +39,15 @@ sub open {
   my($self)	= shift;
 
   $self->_newarg(@_);					## - Parse arguments
-  unless(defined($self->{host}) && defined($self->{comm})){
-    $self->{err} = 'missing hostname or community string';
+  unless(defined($self->{'host'}) && defined($self->{'comm'})){
+    $self->{'err'} = 'missing hostname or community string';
     return undef;
   }
-  $self->{snmp}	= Net::SNMP->session(			## - Create SNMP object
-    Hostname	=> $self->{host},
-    Community	=> $self->{comm},
-    Timeout	=> $self->{tmout},
-    Retries	=> $self->{retry},
+  $self->{'snmp'} = Net::SNMP->session(			## - Create SNMP object
+    Hostname	=> $self->{'host'},
+    Community	=> $self->{'comm'},
+    Timeout	=> $self->{'tmout'},
+    Retries	=> $self->{'retry'},
     Version	=> 1
   );
 }
@@ -68,10 +57,10 @@ sub close {
 ### -- Shut down SNMP session and destroy SNMP object
 
   my($self)	= shift;
-  my($snmp)	= $self->{snmp};
-  $self->{snmp}	= undef;
+  my($status)	= $self->{'snmp'}->close();
 
-  $snmp->close();
+  $self->{'snmp'} = undef;
+  $status;
 }
 
 sub copy {
@@ -81,11 +70,12 @@ sub copy {
   my($self)	= shift;
   my($addr)	= shift || return undef;
   my($file)	= shift || return undef;
-  $self->{rand}	= int(rand(1 << 24));
+
   unless($self->_cktftp($addr, $file)){
     return undef;
   }
-  my(@oids)	= (
+  $self->{'rand'} = int(rand(1 << 24));
+  $self->_xfer(
     $self->ccCopyProtocol(1),
     $self->ccCopySourceFileType(4),
     $self->ccCopyDestFileType(1),
@@ -93,7 +83,6 @@ sub copy {
     $self->ccCopyFileName($file),
     $self->ccCopyEntryRowStatus(4)
   );
-  $self->_xfer(@oids);
 }
 
 sub merge {
@@ -103,11 +92,12 @@ sub merge {
   my($self)	= shift;
   my($addr)	= shift || return undef;
   my($file)	= shift || return undef;
-  $self->{rand}	= int(rand(1 << 24));
+
   unless($self->_cktftp($addr, $file)){
     return undef;
   }
-  my(@oids)	= (
+  $self->{'rand'} = int(rand(1 << 24));
+  $self->_xfer(
     $self->ccCopyProtocol(1),
     $self->ccCopySourceFileType(1),
     $self->ccCopyServerAddress($addr),
@@ -115,7 +105,6 @@ sub merge {
     $self->ccCopyDestFileType(4),
     $self->ccCopyEntryRowStatus(4)
   );
-  $self->_xfer(@oids);
 }
 
 sub error {
@@ -123,8 +112,6 @@ sub error {
 ### -- Return last error message
 
   my($self)	= shift;
-
-  print STDERR "$self->{err}\n";
 
   defined($self->{err}) ? $self->{err} : '' ;
 }
@@ -137,10 +124,10 @@ sub _newarg {
   my(%arg)	= @_;
 
   foreach(keys %arg){
-    $self->{host}  = $arg{$_}, next if /^Host$/oi;	## - SNMP host
-    $self->{comm}  = $arg{$_}, next if /^Comm$/oi;	## - SNMP community 
-    $self->{tmout} = $arg{$_}, next if /^tmout$/oi;	## - SNMP timeout
-    $self->{retry} = $arg{$_}, next if /^Retry$/oi;	## - SNMP timeout
+    $self->{'host'}  = $arg{$_}, next if /^Host$/oi;	## - SNMP host
+    $self->{'comm'}  = $arg{$_}, next if /^Comm$/oi;	## - SNMP community 
+    $self->{'tmout'} = $arg{$_}, next if /^tmout$/oi;	## - SNMP timeout
+    $self->{'retry'} = $arg{$_}, next if /^Retry$/oi;	## - SNMP timeout
   }
 }
 
@@ -156,10 +143,6 @@ sub _cktftp {
     $self->{err} = 'invalid tftp server address';
     return 0;
   }
-  if ($file !~ /^(\/)|([A-Za-z]:)S+/) {
-    $self->{err} = 'invalid tftp file name';
-    return 0;
-  }
   1;
 }
 
@@ -169,34 +152,33 @@ sub _xfer {
 
   my($self)	= shift;
   my(@oids)	= @_;					## - OIDs to use
-  my($snmp)	= $self->{snmp};			## - SNMP obj ref
+  my($snmp)	= $self->{'snmp'};			## - Net::SNMP subclass
   my($answer)	= '';					## - SNMP answer
   my($status)	= 0;					## - SNMP xfer status
 
   $snmp->set_request(@oids);				## - Start xfer
   if ($snmp->error()) {
-    $self->{err} = 'initial request failed';
+    $self->{'err'} = $snmp->error();
     return 0;
   }
   while($status <= 2){
     $answer	= $snmp->get_request($self->ccCopyState());
     $status	= $answer->{$self->ccCopyState()};
-    print STDERR "status: $status\n";
-    last if $status == 3;				## Xfer succeeded
-
+    if ($status == 3) {					## Xfer succeeded
+      last;
+    }
     if ($status == 4) {					## Xfer failed
       $answer	= $snmp->get_request($self->ccCopyFailCause());
       $status	= $answer->{$self->ccCopyFailCause()};
 
-      $self->{err}	= 'unknown error'	if $status == 1;
-      $self->{err}	= 'file access error'	if $status == 2;
-      $self->{err}	= 'tftp timeout'	if $status == 3;
-      $self->{err}	= 'out of memory'	if $status == 4;
-      $self->{err}	= 'no configuration'	if $status == 5;
-
+      $self->{'err'}	= 'unknown error'	if $status == 1;
+      $self->{'err'}	= 'file access error'	if $status == 2;
+      $self->{'err'}	= 'tftp timeout'	if $status == 3;
+      $self->{'err'}	= 'out of memory'	if $status == 4;
+      $self->{'err'}	= 'no configuration'	if $status == 5;
       return 0;
     }
-    sleep(1);
+    sleep(2);
   }
   $snmp->set_request($self->ccCopyEntryRowStatus(6)); 	## - Clear entry row
   1;
@@ -205,38 +187,30 @@ sub _xfer {
 ### -- OIDs taken from CISCO-CONFIG-COPY-MIB-V1SMI.my
 ###
 sub ccCopyProtocol       {
-  my($self)	= shift;
-  ('1.3.6.1.4.1.9.9.96.1.1.1.1.2.'  . $self->{rand}, INTEGER, $_[0])
+  ('1.3.6.1.4.1.9.9.96.1.1.1.1.2.'  . $_[0]->{'rand'}, INTEGER, $_[1])
 }
 sub ccCopySourceFileType {
-  my($self)	= shift;
-  ('1.3.6.1.4.1.9.9.96.1.1.1.1.3.'  . $self->{rand}, INTEGER, $_[0])
+  ('1.3.6.1.4.1.9.9.96.1.1.1.1.3.'  . $_[0]->{'rand'}, INTEGER, $_[1])
 }
 sub ccCopyDestFileType   {
-  my($self)	= shift;
-  ('1.3.6.1.4.1.9.9.96.1.1.1.1.4.'  . $self->{rand}, INTEGER, $_[0])
+  ('1.3.6.1.4.1.9.9.96.1.1.1.1.4.'  . $_[0]->{'rand'}, INTEGER, $_[1])
 }
 sub ccCopyServerAddress  {
-  my($self)	= shift;
-  ('1.3.6.1.4.1.9.9.96.1.1.1.1.5.'  . $self->{rand}, IPADDRESS, $_[0])
+  ('1.3.6.1.4.1.9.9.96.1.1.1.1.5.'  . $_[0]->{'rand'}, IPADDRESS, $_[1])
 }
 sub ccCopyFileName       {
-  my($self)	= shift;
-  ('1.3.6.1.4.1.9.9.96.1.1.1.1.6.'  . $self->{rand}, OCTET_STRING, $_[0])
+  ('1.3.6.1.4.1.9.9.96.1.1.1.1.6.'  . $_[0]->{'rand'}, OCTET_STRING, $_[1])
 }
 sub ccCopyEntryRowStatus {
-  my($self)	= shift;
-  ('1.3.6.1.4.1.9.9.96.1.1.1.1.14.' . $self->{rand}, INTEGER, $_[0])
+  ('1.3.6.1.4.1.9.9.96.1.1.1.1.14.' . $_[0]->{'rand'}, INTEGER, $_[1])
 }
 sub ccCopyState          { 
-  my($self)	= shift;
-  '1.3.6.1.4.1.9.9.96.1.1.1.1.10.'  . $self->{rand}
+  '1.3.6.1.4.1.9.9.96.1.1.1.1.10.'  . $_[0]->{'rand'}
 }
 sub ccCopyFailCause      { 
-  my($self)	= shift;
-  '1.3.6.1.4.1.9.9.96.1.1.1.1.13.'  . $self->{rand}
+  '1.3.6.1.4.1.9.9.96.1.1.1.1.13.'  . $_[0]->{'rand'}
 }
-1;							## - Needed for require
+1;							## - Needed for module
 
 __END__
 
@@ -261,14 +235,14 @@ wrapper for Net::SNMP and the CISCO-CONFIG-COPY-MIB-V1SMI.my MIB schema.
 A read-write SNMP community needs to be defined on each device, which allows
 the setting of parameters to copy or merge a running-config. Below is an 
 example configuration that attempts to restrict read-write access to only the 
-10.0.1.3 host:
+10.0.1.3 host (a less guessable community than 'public' would be wise):
 
     access-list 10 permit host 10.0.1.3
     access-list 10 deny any
     !
     snmp-server tftp-server-list 10
     snmp-server view backup ciscoMgmt.96.1.1.1.1 included
-    snmp-server community 2dcf0eeca916a5 view backup RW 10
+    snmp-server community public view backup RW 10
     end
 
 =head1 METHODS
@@ -288,22 +262,20 @@ Create a new Cisco::CopyConfig object.
 
 =item I<copy>
 
-Copy the running-config to a TFTP server file.  This is
-a convenient means of backing up a device configuration.
+Copy the running-config to a file via TFTP:
 
     $config->copy($tftp_address, $tftp_file);
 
 =item I<merge>
 
-Modify or "merge" the current running config with a TFTP
-server file.  This is a conveient means of altering device configuration.
+Merge a configuration file into the running-config via TFTP:
 
-    $config->copy($tftp_address, $tftp_file);
+    $config->merge($tftp_address, $tftp_file);
 
 =item I<error>
 
-Return the last error message, if any.  It may be more convenient to 
-reference the error variable directly, $config->{err}
+Return the last error message, if any.  This is a convenience method
+that simply returns the value of $config->{'err'}:
 
     $config->error();
 
@@ -311,23 +283,81 @@ reference the error variable directly, $config->{err}
 
 =head1 EXAMPLE
 
-Using 10.0.1.3 as a TFTP server, the following example copies the 
-running-config of lab-router-a:
+Using 10.0.1.3 as a TFTP server, the following example merges a
+configuration file into the running-config of lab-router-a, and 
+then copies the entire config of lab-router-a to a file:
 
-    $tftp_a	= '10.0.1.3';
-    $tftp_f	= '/tftpboot/lab-router-a.config';
-    $host_a	= 'lab-router-a';
-    $comm_s	= '2dcf0eeca916a5';
+    use Cisco::CopyConfig;
+
+    $|		= 1; # autoflush output
+    $tftp	= '10.0.1.3';
+    $merge_f	= 'new-config.upload';
+    $copy_f	= 'lab-router-a.config';
+    $host	= 'lab-router-a';
+    $comm	= 'public';
     $config	= Cisco::CopyConfig->new(
-		     Host => $host_a,
-		     Comm => $comm_s
+		     Host => $host,
+		     Comm => $comm
     );
-    if ($config->copy($tftp_a, $tftp_f)) {
-      print "${host_a}:running-config -> ${tftp_a}:${tftp_f}\n";
+    $path	= "/tftpboot/${copy_f}"; 
+
+    open(COPY_FH, "> $path") || die $!;
+    close(COPY_FH); chmod 0666, $path || die $!;
+
+    print "${tftp}:${merge_f} -> ${host}:running-config... ";
+    if ($config->merge($tftp, $merge_f)) {  # merge the new config
+      print "OK\n";
+    } else {
+      die $config->error();
     }
-    else {
-      print "$config->{err}\n";
+    print "${host}:running-config -> ${tftp}:${copy_f}... ";
+    if ($config->copy($tftp, $copy_f)) {    # copy the updated config
+      print "OK\n";
+    } else {
+      die $config->error();
     }
+
+    ---->8---- new-config.upload file ---->8----
+    alias exec example_ccout copy running-config tftp
+    alias exec example_ccin copy tftp running-config
+    ! configuration uploads need an 'end' statement
+    end
+
+=head1 TROUBLESHOOTING
+
+Manipulating the running-configuration of a device running IOS can be a 
+frustrating experience.  Checking the status of $config->error() is a good
+starting point to debugging the problem.  Here's a short list of other things
+to try before giving up:
+
+=over 4
+
+=item 1.
+
+Most TFTP servers will not automatically create files. Scripts should 
+create files that will be read from or copied to, and set the appropriate
+permissions (usually global).  
+
+=item 2.
+
+Most TFTP servers change directories (usually to '/tftpboot') for security
+reasons.  If it does, make sure not to prepend the TFTP directory in the 
+file path passed to I<Cisco::CopyConfig>.
+
+=item 3.
+
+Try manually copying files to and from the TFTP server to flash.  This is 
+accomplished via the "copy" command in IOS (copy ? for help).  If the files 
+are able to be copied in each direction, it is probably a problem with the 
+SNMP configuration.  It could also indicate a file path issue.  See above.
+
+=item 4.
+
+Make sure the community string in the script and the IOS device match
+and that it is a read/write (RW) community.  See B<PREPERATION> above for 
+an example of how to set a read/write community with reasonable restrictions.
+
+=back
 
 =head1 PREREQUISITES
 

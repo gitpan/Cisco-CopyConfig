@@ -1,5 +1,15 @@
 Revision history for Perl extension Cisco::CopyConfig.
 
+1.3	2004/11/04 - Aaron Scarisbrick
+	- Removed lingering debug print statements
+	- Removed TFTP path restrictions
+	- Removed useless Exporter objects
+	- General code cleanup
+	- Fixed documentation typos
+	- Added TROUBLESHOOTING section to documentation
+	- General documentation cleanup
+	- Added README
+
 1.2	2003/03/20 - Aaron Scarisbrick
 	- Added documentation 
 	- Added Exporter objects
