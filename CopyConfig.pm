@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 ###
-### $Id: CopyConfig.pm,v 1.3 2004/11/04 22:23:19 aaronsca Exp $
+### $Id: CopyConfig.pm,v 1.3 2004/11/04 22:23:19 aaronsca Exp aaronsca $
 ###
 ### -- Manipulate running-config of devices running IOS
 ###
@@ -8,11 +8,8 @@
 package Cisco::CopyConfig;
 use strict;
 use Socket;
-use Exporter;
 use Net::SNMP;
-use vars qw($VERSION);
-
-$VERSION	= '$Revision: 1.3 $ ' =~ /\$Revision:\s+([^\s]+)/;
+$Cisco::CopyConfig::VERSION = sprintf "%d.%02d", q$Revision: 1.3 $ =~ /(\d+)/g;
 
 sub new {
 ###
