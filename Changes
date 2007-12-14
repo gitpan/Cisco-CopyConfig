@@ -1,5 +1,9 @@
 Revision history for Perl extension Cisco::CopyConfig.
 
+1.04	2007/12/14 - Eugene Bogush
+	- Add SNMP v3
+	- Fixed VERSION variable
+
 1.04	2004/11/21 - Aaron Scarisbrick
 	- Removed Exporter and vars 'use' module statements
 	- Fixed VERSION variable

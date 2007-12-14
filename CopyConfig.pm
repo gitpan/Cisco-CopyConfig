@@ -1,7 +1,5 @@
 #!/usr/bin/perl -w
 ###
-### $Id: CopyConfig.pm,v 1.3 2004/11/04 22:23:19 aaronsca Exp aaronsca $
-###
 ### -- Manipulate running-config of devices running IOS
 ###
 
@@ -9,7 +7,7 @@ package Cisco::CopyConfig;
 use strict;
 use Socket;
 use Net::SNMP;
-$Cisco::CopyConfig::VERSION = sprintf "%d.%02d", q$Revision: 1.3 $ =~ /(\d+)/g;
+$Cisco::CopyConfig::VERSION = sprintf "%d.%d", q$Revision: 1.05 $ =~ /(\d+)/g;
 
 sub new {
 ###
@@ -22,6 +20,11 @@ sub new {
     'comm'	=> '',					## - Default community
     'tmout'	=> 2,					## - Default timeout
     'retry'	=> 2					## - Default retries
+#    'user'	=> '',					## - SNMP user v3
+#    'user_pass'	=> '',					## - SNMP user password v3
+#    'auth_proto' => 'md5',					## - SNMP (md5|sha)
+#    'sec_pass' => '',					## - SNMP pass phrase
+#    'sec_proto'	=> 'des'				## - SNMP (des|aes)
   }, $class;
   $self->_newarg(@_);					## - Parse arguments
   srand(time() ^ ($$ + ($$ << 15)));			## - Seed random number
@@ -36,17 +39,52 @@ sub open {
   my($self)	= shift;
 
   $self->_newarg(@_);					## - Parse arguments
-  unless(defined($self->{'host'}) && defined($self->{'comm'})){
-    $self->{'err'} = 'missing hostname or community string';
+  unless(defined($self->{'host'})){
+    $self->{'err'} = 'missing hostname string';
     return undef;
   }
-  $self->{'snmp'} = Net::SNMP->session(			## - Create SNMP object
-    Hostname	=> $self->{'host'},
-    Community	=> $self->{'comm'},
-    Timeout	=> $self->{'tmout'},
-    Retries	=> $self->{'retry'},
-    Version	=> 1
-  );
+  
+  if  (($self->{'snmp_ver'} eq 1) || ($self->{'snmp_ver'} eq 2)) {  
+  unless(defined($self->{'comm'})){
+    $self->{'err'} = 'missing community string';
+    return undef;
+  }
+    $self->{'snmp'} = Net::SNMP->session(			## - Create SNMP object
+	Hostname		=> $self->{'host'},
+	Community		=> $self->{'comm'},
+	Timeout		=> $self->{'tmout'},
+	Retries		=> $self->{'retry'},
+	Version		=> $self->{'snmp_ver'}
+    );
+  } elsif ($self->{'snmp_ver'} eq 3) {
+
+    if ( exists $self->{'sec_pass'} eq ''  ) { delete $self->{'sec_pass'};  } 
+    if ( exists $self->{'sec_proto'} eq '' ) { delete $self->{'sec_proto'}; }
+
+    if ( ( exists $self->{'sec_pass'} ) || ( exists $self->{'sec_proto'} ) ) { 
+     $self->{'snmp'} = Net::SNMP->session (		## - Create SNMP object
+           -hostname => $self->{'host'},
+           -version => 3,
+           -timeout => $self->{'tmout'},
+           -retries => $self->{'retry'},
+           -username => $self->{'user'},
+           -authpassword => $self->{'user_pass'},
+	   -authprotocol => $self->{'auth_proto'},
+	   -privpassword => $self->{'sec_pass'},
+	   -privprotocol => $self->{'sec_proto'}
+     );
+    } else {
+     $self->{'snmp'} = Net::SNMP->session (		## - Create SNMP object
+           -hostname => $self->{'host'},
+           -version => 3,
+           -timeout => $self->{'tmout'},
+           -retries => $self->{'retry'},
+           -username => $self->{'user'},
+           -authpassword => $self->{'user_pass'},
+	   -authprotocol => $self->{'auth_proto'}
+    );
+   }
+  }
 }
 
 sub close {
@@ -124,7 +162,13 @@ sub _newarg {
     $self->{'host'}  = $arg{$_}, next if /^Host$/oi;	## - SNMP host
     $self->{'comm'}  = $arg{$_}, next if /^Comm$/oi;	## - SNMP community 
     $self->{'tmout'} = $arg{$_}, next if /^tmout$/oi;	## - SNMP timeout
-    $self->{'retry'} = $arg{$_}, next if /^Retry$/oi;	## - SNMP timeout
+    $self->{'retry'} = $arg{$_}, next if /^Retry$/oi;	## - SNMP retry
+    $self->{'snmp_ver'} = $arg{$_}, next if /^Snmp_Ver$/oi;	## - SNMP version
+    $self->{'user'} = $arg{$_}, next if /^User$/oi;	## - SNMP user v3
+    $self->{'user_pass'} = $arg{$_}, next if /^User_Pass$/oi;	## - SNMP user password v3
+    $self->{'auth_proto'} = $arg{$_}, next if /^Auth_Proto$/oi;	## - SNMP (md5|sha)
+    $self->{'sec_pass'} = $arg{$_}, next if /^Sec_Pass$/oi;	## - SNMP pass phrase
+    $self->{'sec_proto'} = $arg{$_}, next if /^Sec_Proto$/oi;	## - SNMP (des|aes)
   }
 }
 
@@ -153,6 +197,10 @@ sub _xfer {
   my($answer)	= '';					## - SNMP answer
   my($status)	= 0;					## - SNMP xfer status
 
+  if (!$self->{'snmp'}) {
+    print "ERROR: SNMP session don't open! Check username and password for snmp v3\n";
+    return 0;
+  }
   $snmp->set_request(@oids);				## - Start xfer
   if ($snmp->error()) {
     $self->{'err'} = $snmp->error();
@@ -242,6 +290,22 @@ example configuration that attempts to restrict read-write access to only the
     snmp-server community public view backup RW 10
     end
 
+for snmp V3
+
+    access-list 10 remark tftp-server
+    access-list 10 permit 192.168.3.13
+    access-list 10 deny   any log
+    access-list 11 remark control snmp
+    access-list 11 permit 192.168.3.13
+    access-list 11 deny   any log
+    snmp-server group RW v3 auth write RWview
+    snmp-server view RWview ccCopyTable included
+    snmp-server tftp-server-list 10
+    # define user
+    snmp-server user <user> RW v3 auth md5 <pass>
+    # or
+    snmp-server user <user> RW v3 auth md5 <pass1> priv des56 <pass2>
+
 =head1 METHODS
 
 =over 8
@@ -255,6 +319,12 @@ Create a new Cisco::CopyConfig object.
                Comm  => $community_string,
             [ Tmout  => $snmp_timeout_in_seconds, ]
             [ Retry  => $snmp_retries_on_failure, ]
+            [ Snmp_Ver => [1|2|3], ]
+            [ < User => 'user', >
+              < User_Pass => 'password', >
+              < Auth_Proto => ['md5'|'sha'], > ]
+            [ < Sec_Pass => 'secpasswd', >
+              < Sec_Proto => ['des'|'3des'|'aes'] > ]
     );
 
 =item I<copy>
@@ -365,12 +435,10 @@ This module requires the I<Net::SNMP> and I<Socket> modules.
 Local file creation and permissions checking are not performed, as 
 TFTP file destinations can be somewhere other than the local system.
 
-Only SNMP v1 and v2 are currently supported in this module.  SNMP v3 
-is on the TODO list.
-
 =head1 AUTHORS
 
 Aaron Scarisbrick <aaronsca@cpan.org>
+Eugene Bogush
 
 =head1 DISCLAIMER
 
